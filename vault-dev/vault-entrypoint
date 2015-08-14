@@ -1,0 +1,78 @@
+#! /bin/bash
+
+set -m
+
+# if test -z "$ETCD_PORT_2379_TCP_ADDR"; then
+#     echo "missing etcd link information!"
+#     exit 2
+# fi
+
+
+# cd /etc/opt/vault
+#  sed -e "s@ETCD_PORT_2379_TCP_ADDR@$ETCD_PORT_2379_TCP_ADDR@g" \
+#      -e "s@ETCD_PORT_2379_TCP_PORT@$ETCD_PORT_2379_TCP_PORT@g" \
+#      < vault.hcl.template > vault.hcl
+
+cd /
+
+rm -f /var/opt/vault/share/root-token
+
+# etcd_url="http://$ETCD_PORT_2379_TCP_ADDR:$ETCD_PORT_2379_TCP_PORT/v2/members"
+
+# start="$(date +"%s")"
+# while ( curl -q "$etcd_url" | jq -e '(.members[0].clientURLs | length) == 0' ) > /dev/null; do
+#     now="$(date +"%s")"
+#     if test "$(($start + 60))" -lt "$now"; then
+#         echo "$(date) - giving up waiting for etcd to come up"
+#         exit 1
+#     fi
+#     echo "$(date) - waiting for etcd"
+#     sleep 1
+# done
+
+# echo "$(date) - etcd up"
+
+/sbin/gosu vault /opt/vault/bin/vault server -config=/etc/opt/vault/vault.hcl > /var/opt/vault/log/vault-server.log 2>&1 &
+
+start="$(date +"%s")"
+while ! ( curl -q "http://127.0.0.1:8200/v1/sys/seal-status" ) > /dev/null; do
+    now="$(date +"%s")"
+    if test "$(($start + 60))" -lt "$now"; then
+        echo "$(date) - giving up waiting for vault to come up"
+        exit 1
+    fi
+    echo "$(date) - waiting for vault"
+    sleep 1
+done
+echo "$(date) - vault up"
+
+init_output="$(curl -X PUT -d '{"secret_shares":1, "secret_threshold": 1}' http://127.0.0.1:8200/v1/sys/init)"
+echo "init output: $init_output"
+key="$(echo "$init_output" | jq '.keys[0]')"
+echo "key: $key"
+root_token="$(echo "$init_output" | jq -r '.root_token')"
+echo "root token: $root_token"
+
+echo "$(date) - Unsealing vault..."
+
+curl -X PUT \
+     -H "X-Vault-Token: $root_token" \
+     -H "Content-Type: application/json" \
+     -d "{ \"key\": $key }" \
+     http://127.0.0.1:8200/v1/sys/unseal
+
+echo "$(date) - Done"
+
+echo "$(date) - Enabling audit log..."
+
+curl -X PUT \
+     -H "X-Vault-Token: $root_token" \
+     -H "Content-Type: application/json" \
+     -d '{ "type": "file", "description": "store logs in the file!", "options": { "path": "/var/opt/vault/audit/vault-audit.log" }}' \
+     http://127.0.0.1:8200/v1/sys/audit/file
+
+echo "$(date) - Done"
+
+echo "$root_token" > /var/opt/vault/share/root-token
+
+fg
