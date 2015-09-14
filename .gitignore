@@ -1,3 +1,4 @@
 *.marker
 *.log
 .stack-work
+vault-dev/vault-entrypoint
