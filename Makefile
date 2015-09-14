@@ -31,7 +31,7 @@ build/postgres-dev.marker: postgres-dev/Dockerfile postgres-dev/postgres-dev-ini
 build/vault-dev.marker: vault-dev/Dockerfile vault-dev/vault.hcl vault-dev/vault-entrypoint
 
 vault-dev/vault-entrypoint: build/turtle.marker vault-dev/src/vault-entrypoint.hs
-	stack build
+	stack --docker-run-args="--interactive=false" build
 	cp .stack-work/install/$(prg)/bin/vault-entrypoint vault-dev/vault-entrypoint
 
 
