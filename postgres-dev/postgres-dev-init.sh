@@ -2,6 +2,8 @@
 
 vault_url="http://$VAULT_PORT_8200_TCP_ADDR:$VAULT_PORT_8200_TCP_PORT/v1"
 
+echo 'create extension pgcrypto;' | psql -U swarm
+
 start="$(date +"%s")"
 while ( curl -q "$vault_url/sys/seal-status" | jq -e '(.sealed) == true' ) > /dev/null; do
     now="$(date +"%s")"
